@@ -3,8 +3,11 @@ import winsound
 from ctypes import wintypes
 import tkinter as tk
 import threading
+import os
+import sys
 import time
 user32 = ctypes.WinDLL("user32", use_last_error=True)
+
 
 
 # =========================
@@ -48,12 +51,12 @@ def get_zone(x, y):
 
 def play_drum(zone):
     sounds = {
-        "HI-HAT": "sounds/hihat.wav",
-        "CRASH": "sounds/crash.wav",
-        "SNARE": "sounds/snare.wav",
-        "TOM": "sounds/tom.wav",
-        "KICK": "sounds/kick.wav",
-        "CLAP": "sounds/clap.wav",
+        "HI-HAT": resource_path("sounds/hihat.wav"),
+        "CRASH": resource_path("sounds/crash.wav"),
+        "SNARE": resource_path("sounds/snare.wav"),
+        "TOM": resource_path("sounds/tom.wav"),
+        "KICK": resource_path("sounds/kick.wav"),
+        "CLAP": resource_path("sounds/clap.wav"),
     }
 
     winsound.PlaySound(
@@ -76,6 +79,13 @@ def trigger_drum(zone):
     last_hit_time = now
     play_drum(zone)
 
+def resource_path(relative_path):
+    try:
+        base_path = sys._MEIPASS
+    except AttributeError:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
 
 # =========================
 # WINDOWS STRUCTURES
@@ -171,16 +181,52 @@ CallWindowProcW.restype = ctypes.c_ssize_t
 # =========================
 
 root = tk.Tk()
-root.title("TrackPadDrums - Touchpad Probe")
-root.geometry("600x300")
+root.title("WizardBoat - TrackPadDrums")
+root.geometry("700x520")
+root.configure(bg="#181818")
+title = tk.Label(
+    root,
+    text="WIZARDBOAT'S TRACKPAD DRUMS",
+    font=("Arial", 24, "bold"),
+    fg="white",
+    bg="#181818"
+)
+title.pack(pady=(20, 5))
 
 label = tk.Label(
     root,
-    text="Put TWO fingers on the trackpad and move them",
-    font=("Arial", 18),
-    justify="center"
+    text="Two fingers • Move across your touchpad to play",
+    font=("Arial", 14),
+    justify="center",
+    fg="#aaaaaa",
+    bg="#181818"
 )
 label.pack(expand=True)
+pads_frame = tk.Frame(
+    root,
+    bg="#181818"
+)
+
+pads_frame.pack(
+    fill="both",
+    expand=True,
+    padx=40,
+    pady=10
+)
+
+canvas = tk.Canvas(
+    pads_frame,
+    bg="#181818",
+    highlightthickness=0
+)
+
+canvas.place(
+    relx=0,
+    rely=0,
+    relwidth=1,
+    relheight=1
+)
+
 
 root.update()
 
