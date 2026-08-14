@@ -1,7 +1,9 @@
 import ctypes
+import winsound
 from ctypes import wintypes
 import tkinter as tk
-
+import threading
+import time
 user32 = ctypes.WinDLL("user32", use_last_error=True)
 
 # =========================
@@ -9,8 +11,71 @@ user32 = ctypes.WinDLL("user32", use_last_error=True)
 # =========================
 
 WM_POINTERUPDATE = 0x0245
+WM_POINTERDOWN = 0x0246
+WM_POINTERUP = 0x0247
 PT_TOUCHPAD = 0x00000005
 GWL_WNDPROC = -4
+
+#=========================
+#ValueTable
+#=========================
+
+X_MIN = 900
+X_MAX = 10200
+Y_MIN = 200
+Y_MAX = 6900
+
+X_MID = (X_MIN + X_MAX) / 2
+
+Y_THIRD_1 = Y_MIN + (Y_MAX - Y_MIN) / 3
+Y_THIRD_2 = Y_MIN + 2 * (Y_MAX - Y_MIN) / 3
+
+
+def get_zone(x, y):
+
+    # Your trackpad reports larger X values on the LEFT
+    left = x > X_MID
+
+    if y < Y_THIRD_1:
+        return "HI-HAT" if left else "CRASH"
+
+    elif y < Y_THIRD_2:
+        return "SNARE" if left else "TOM"
+
+    else:
+        return "KICK" if left else "CLAP"
+def play_drum(zone):
+    sounds = {
+        "HI-HAT": (1200, 60),
+        "CRASH": (1800, 150),
+        "SNARE": (700, 100),
+        "TOM": (400, 120),
+        "KICK": (120, 150),
+        "CLAP": (900, 80),
+    }
+
+    frequency, duration = sounds[zone]
+    winsound.Beep(frequency, duration)
+
+last_hit_time = 0
+HIT_COOLDOWN = 0.15  # seconds
+
+
+def trigger_drum(zone):
+    global last_hit_time
+
+    now = time.time()
+
+    if now - last_hit_time < HIT_COOLDOWN:
+        return
+
+    last_hit_time = now
+
+    threading.Thread(
+        target=play_drum,
+        args=(zone,),
+        daemon=True
+    ).start()
 
 
 # =========================
@@ -156,7 +221,6 @@ old_proc = None
 def window_proc(hwnd, msg, wparam, lparam):
 
     if msg == WM_POINTERUPDATE:
-
         pointer_id = get_pointer_id(wparam)
 
         info = POINTER_INFO()
@@ -176,16 +240,16 @@ def window_proc(hwnd, msg, wparam, lparam):
 
                     x = touch.pointerInfo.ptHimetricLocation.x
                     y = touch.pointerInfo.ptHimetricLocation.y
+                    zone = get_zone(x, y)
 
                     output = (
-                        f"TOUCHPAD\n"
-                        f"ID: {pointer_id}\n"
+                        f"ZONE: {zone}\n\n"
                         f"X: {x}\n"
                         f"Y: {y}"
                     )
 
-                    print(output)
-
+                    print(f"{zone} | X={x}, Y={y}")
+                    trigger_drum(zone)
                     label.config(text=output)
 
     return CallWindowProcW(
