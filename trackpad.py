@@ -1,4 +1,5 @@
 import ctypes
+import math
 import winsound
 from ctypes import wintypes
 import tkinter as tk
@@ -21,7 +22,7 @@ PT_TOUCHPAD = 0x00000005
 GWL_WNDPROC = -4
 
 #=========================
-#ValueTable
+#Functions
 #=========================
 
 X_MIN = 900
@@ -64,20 +65,9 @@ def play_drum(zone):
         winsound.SND_FILENAME | winsound.SND_ASYNC
     )
 
-last_hit_time = 0
-HIT_COOLDOWN = 0.1
-
-
-def trigger_drum(zone):
-    global last_hit_time
-
-    now = time.perf_counter()
-
-    if now - last_hit_time < HIT_COOLDOWN:
-        return
-
-    last_hit_time = now
-    play_drum(zone)
+finger_state = {}
+MOVEMENT_THRESHOLD_SQ = 1000
+STOP_DELAY = 0.08
 
 def resource_path(relative_path):
     try:
@@ -287,14 +277,136 @@ def window_proc(hwnd, msg, wparam, lparam):
                     y = touch.pointerInfo.ptHimetricLocation.y
                     zone = get_zone(x, y)
 
+                    now = time.perf_counter()
+
+# Create independent state for a newly detected finger
+                    if pointer_id not in finger_state:
+                        finger_state[pointer_id] = {
+                            "last_x": x,
+                            "last_y": y,
+                            "last_zone": zone,
+
+                            #where the gesture started
+                            "start_zone": zone,
+                            "gesture_started": False,
+                            #stop detection
+                            "last_move_time": now,
+                            "stop_triggered": False,
+                            "last_hit_zone": None,
+                            "prev_dx": None,
+                            "prev_dy": None
+                        }
+
+                    state = finger_state[pointer_id]
+
+                    dx = x - state["last_x"]
+                    dy = y - state["last_y"]
+
+                    distance_sq = dx * dx + dy * dy
+                    if distance_sq > MOVEMENT_THRESHOLD_SQ:
+                        # Finger is meaningfully moving
+
+                        # First meaningful movement of a new gesture
+                        if not state["gesture_started"]:
+
+                            # Don't replay the zone that was just hit
+                            if state["start_zone"] != state["last_hit_zone"]:
+                                print(
+                                    f"START HIT! Finger {pointer_id} "
+                                    f"→ {state['start_zone']}"
+                                )
+                                play_drum(state["start_zone"])
+                                state["last_hit_zone"] = state["start_zone"]
+
+                            state["gesture_started"] = True
+
+                            # A new gesture should start with no previous direction
+                            state["prev_dx"] = None
+                            state["prev_dy"] = None
+
+                         # ==========================================
+                         # SHARP TURN DETECTION
+                         # ==========================================
+
+                        # We need a previous movement direction before
+                        # we can compare directions
+                        if state["prev_dx"] is not None:
+
+                            # Dot product tells us how similar the directions are
+                            dot = (
+                                state["prev_dx"] * dx
+                                + state["prev_dy"] * dy
+                            )
+
+                            # Length of each movement vector
+                            prev_length = math.sqrt(
+                                state["prev_dx"] ** 2
+                                + state["prev_dy"] ** 2
+                             )
+
+                            current_length = math.sqrt(
+                                dx ** 2
+                                + dy ** 2
+                            )
+
+                            # cos(angle) between the two movement directions
+                            cos_angle = dot / (prev_length * current_length)
+
+                             # Prevent tiny floating-point errors from causing problems
+                            cos_angle = max(-1, min(1, cos_angle))
+
+                            angle = math.degrees(math.acos(cos_angle))
+
+                            print(f"TURN ANGLE: {angle:.1f}°")
+
+                        # Store this movement as the direction for next time
+                        state["prev_dx"] = dx
+                        state["prev_dy"] = dy
+
+                        # Remember this finger is moving
+                        state["last_move_time"] = now
+                        state["stop_triggered"] = False
+
+
+                    else:
+                        # Finger is not meaningfully moving
+                        stopped_for = now - state["last_move_time"]
+
+                        if stopped_for >= STOP_DELAY and not state["stop_triggered"]:
+                            print(f"STOP HIT! Finger {pointer_id} → {zone}")
+                            play_drum(zone)
+
+                            state["last_hit_zone"] = zone
+                            state["stop_triggered"] = True
+
+                            # Gesture finished
+                            state["gesture_started"] = False
+                            state["start_zone"] = zone
+
+                            # Forget old direction for the next gesture
+                            state["prev_dx"] = None
+                            state["prev_dy"] = None                    
+
                     output = (
+                        f"FINGER: {pointer_id}\n"
                         f"ZONE: {zone}\n\n"
                         f"X: {x}\n"
-                        f"Y: {y}"
+                        f"Y: {y}\n"
+                        f"Movement²: {distance_sq}"
                     )
 
-                    print(f"{zone} | X={x}, Y={y}")
-                    trigger_drum(zone)
+                    print(
+                        f"Finger {pointer_id} | "
+                        f"{zone} | X={x}, Y={y} | "
+                        f"Movement²={distance_sq} | "
+                        f"stopped_for={now - state['last_move_time']:.3f}"
+                    )
+
+                    # Update this finger's state
+                    state["last_x"] = x
+                    state["last_y"] = y
+                    state["last_zone"] = zone
+
                     label.config(text=output)
 
     return CallWindowProcW(
