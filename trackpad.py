@@ -6,6 +6,7 @@ import threading
 import time
 user32 = ctypes.WinDLL("user32", use_last_error=True)
 
+
 # =========================
 # CONSTANTS
 # =========================
@@ -44,38 +45,36 @@ def get_zone(x, y):
 
     else:
         return "KICK" if left else "CLAP"
+
 def play_drum(zone):
     sounds = {
-        "HI-HAT": (1200, 60),
-        "CRASH": (1800, 150),
-        "SNARE": (700, 100),
-        "TOM": (400, 120),
-        "KICK": (120, 150),
-        "CLAP": (900, 80),
+        "HI-HAT": "sounds/hihat.wav",
+        "CRASH": "sounds/crash.wav",
+        "SNARE": "sounds/snare.wav",
+        "TOM": "sounds/tom.wav",
+        "KICK": "sounds/kick.wav",
+        "CLAP": "sounds/clap.wav",
     }
 
-    frequency, duration = sounds[zone]
-    winsound.Beep(frequency, duration)
+    winsound.PlaySound(
+        sounds[zone],
+        winsound.SND_FILENAME | winsound.SND_ASYNC
+    )
 
 last_hit_time = 0
-HIT_COOLDOWN = 0.15  # seconds
+HIT_COOLDOWN = 0.1
 
 
 def trigger_drum(zone):
     global last_hit_time
 
-    now = time.time()
+    now = time.perf_counter()
 
     if now - last_hit_time < HIT_COOLDOWN:
         return
 
     last_hit_time = now
-
-    threading.Thread(
-        target=play_drum,
-        args=(zone,),
-        daemon=True
-    ).start()
+    play_drum(zone)
 
 
 # =========================
